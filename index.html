@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>知り合いからのLINE</title>
+<!--
+  W5「知り合いからのLINE」体験（南風原高校 ITリテラシー講座 2026/10/19）
+  ・登場人物・団体・金額はすべて架空。実在のサービス名は出さない（画面はチャットアプリ風）
+  ・タップするたびに会話が1つ進む（返信はこちらで決めてある＝選ばせない）。相手が少しずつ豹変していく
+  ・最後に「どこで止まれたか」「手口の4つ」の種明かし
+  ・文面は下の STEPS を書き換えれば変わる。{who:'you'|'me'|'sys', text, card?, mark?}
+-->
+<style>
+:root{--bg:#8CABD9;--me:#7CE36D;--you:#fff;--ink:#222}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{font-family:"Hiragino Sans","Noto Sans JP","Yu Gothic UI",Meiryo,sans-serif;background:#1b2838;display:flex;align-items:center;justify-content:center;min-height:100%}
+#phone{width:min(430px,100vw);height:min(900px,100vh);background:var(--bg);display:flex;flex-direction:column;position:relative;overflow:hidden;border-radius:28px;box-shadow:0 20px 60px rgba(0,0,0,.5);transition:background .8s}
+#phone.dark{background:#5b6f8f}
+#phone.darker{background:#3a4660}
+header{background:#fff;padding:14px 16px 10px;display:flex;align-items:center;gap:12px;border-bottom:1px solid #ddd;z-index:2}
+header .av{width:44px;height:44px;border-radius:50%;background:#ccc;display:flex;align-items:center;justify-content:center;font-weight:800;color:#fff;font-size:18px;transition:background .5s}
+header .nm{font-weight:800;font-size:17px;color:var(--ink)}
+header .st{font-size:12px;color:#777}
+#bar{height:5px;background:rgba(255,255,255,.35)}#bar i{display:block;height:100%;background:#FFE600;width:0;transition:width .3s}
+#log{flex:1;overflow:auto;padding:14px 12px 20px;display:flex;flex-direction:column;gap:10px}
+.day{align-self:center;background:rgba(0,0,0,.18);color:#fff;font-size:12px;padding:3px 12px;border-radius:999px;margin:6px 0}
+.msg{max-width:80%;padding:10px 13px;border-radius:18px;font-size:16px;line-height:1.5;color:var(--ink);position:relative;white-space:pre-wrap;animation:pop .25s ease}
+.msg.you{background:var(--you);align-self:flex-start;border-top-left-radius:4px}
+.msg.me{background:var(--me);align-self:flex-end;border-top-right-radius:4px}
+.msg.sys{background:#FFF3C4;align-self:center;font-size:14px;color:#6b4e00;border-radius:12px;text-align:center}
+.msg .t{font-size:11px;color:#666;position:absolute;bottom:2px}
+.msg.you .t{right:-38px}.msg.me .t{left:-38px}
+.card{background:#fff;border-radius:14px;padding:10px;font-size:14px;color:#333;border:1px solid #ddd;margin-top:6px}
+.card b{display:block;font-size:15px;color:#000;margin-bottom:4px}
+.mark{align-self:flex-start;background:#0B2545;color:#FFE600;font-weight:900;font-size:13px;padding:4px 10px;border-radius:999px;margin-top:-4px}
+@keyframes pop{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+.typing{align-self:flex-start;background:#fff;border-radius:18px;padding:10px 16px;font-size:18px;letter-spacing:4px;color:#999;animation:pop .2s}
+#next{background:#fff;padding:12px 12px 18px;border-top:1px solid #ddd}
+#next button{width:100%;border:0;background:#1E88E5;color:#fff;font:800 18px/1.3 inherit;padding:16px;border-radius:14px;cursor:pointer}
+#next button:disabled{background:#9bb;opacity:.6}
+#next .sub{font-size:12px;color:#777;text-align:center;margin-top:8px}
+#reveal{position:absolute;inset:0;background:#0B2545;color:#fff;display:none;flex-direction:column;overflow:auto;padding:22px 18px 30px;z-index:5}
+#reveal.open{display:flex}
+#reveal h2{font-size:24px;font-weight:900;margin-bottom:6px}
+#reveal h2 small{display:block;font-size:14px;font-weight:700;color:#FFE600;margin-bottom:6px}
+#reveal .step{background:rgba(255,255,255,.08);border-left:6px solid #FFE600;border-radius:10px;padding:10px 12px;margin-top:10px;font-size:15px;line-height:1.55}
+#reveal .step b{color:#FFE600;font-size:17px}
+#reveal .ok{border-left-color:#4CD28A}#reveal .ok b{color:#4CD28A}
+#reveal .big{font-size:20px;font-weight:900;margin:18px 0 6px;line-height:1.5}
+#reveal button{margin-top:18px;border:0;background:#FFE600;color:#0B2545;font:900 16px inherit;padding:12px;border-radius:12px;cursor:pointer}
+</style>
+</head>
+<body>
+<div id="phone">
+  <header><div class="av" id="av">ハ</div><div><div class="nm" id="nm">ハルト（バスケ部 先輩）</div><div class="st" id="st">オンライン</div></div></header>
+  <div id="bar"><i></i></div>
+  <div id="log"></div>
+  <div id="next"><button id="btn">タップして進む ▶</button><div class="sub" id="sub">返信は、あなたの代わりに「りく」が打ちます</div></div>
+  <div id="reveal"></div>
+</div>
+<script>
+// ─────────── 台本（すべて架空）。1要素＝1タップ ───────────
+// who: 'you'=相手  'me'=自分（りく）  'sys'=システム   mark: 画面に出る小さな印（任意）
+const STEPS = [
+  {day:'10/3（金）'},
+  {who:'you',text:'今日の練習おつかれ！'},
+  {who:'me',text:'おつかれです！'},
+  {who:'you',text:'土曜の試合、9時集合に変わったから'},
+  {who:'me',text:'了解です👍'},
+  {day:'今日 21:40'},
+  {who:'you',text:'急なんだけど、りくってバイト探してたよね？'},
+  {who:'me',text:'探してます！なんかあります？'},
+  {who:'you',text:'観光客の荷物を、別の場所に届けるだけのバイトがあって。今度俺も行く予定なんだけど'},
+  {who:'me',text:'荷物を届けるだけ？'},
+  {who:'you',text:'そう。海外の富裕層の人が多くて、普通の業者には預けたくないらしくて、信用できる人に頼んで運んでもらうんだって'},
+  {who:'you',text:'1回運ぶのに半日くらいかかるから、距離にもよるけど半日で5,000〜8,000円くらいもらえるみたい。富裕層向けだから高めなんだよね'},
+  {who:'me',text:'えー、それはいいですね'},
+  {who:'you',text:'人気のバイトで枠があと1人か2人らしくて、今日中に埋まるらしいんだよね。興味あるなら早めに登録した方がいいかも'},
+  {who:'you',text:'あと、俺の紹介で入ってくれたら、俺にも謝礼が入るんだよね。それでなんかおごるわ。りく、スタバ好きだったよね？スタバ行こうよ'},
+  {who:'me',text:'スタバいいですね笑　やってみたいです'},
+  {who:'you',text:'ありがとう、助かる！じゃあ担当の人につなぐね。電話は嫌だろうからLINEでやりとりできるようにしとく。みんなやってるから大丈夫だよ'},
+  {who:'you',text:'',card:{title:'RYO（担当）',body:'ID: ryo_work_0x'}},
+  {who:'me',text:'わかりました、連絡してみます'},
+  {sw:{av:'R',nm:'RYO（担当）',st:'オンライン',dark:'dark'}, day:'今日 21:52'},
+  {who:'me',text:'ハルト先輩の紹介で連絡しました。りくです'},
+  {who:'you',text:'はじめまして！ハルトくんの紹介ね、ありがとう😊 ハルトくんから聞いてると思うけど、お客さんの荷物を運ぶだけの仕事です'},
+  {who:'you',text:'ただ、観光客の富裕層の方の荷物をお預かりするので、念のため身分証の確認だけ必要で。学生証と、保険証か免許の写真を送ってもらえるかな'},
+  {who:'you',text:'あと緊急連絡用に住所もお願い。給料の振込は銀行でもPayPayでも大丈夫だから、それはあとでいいよ'},
+  {who:'me',text:'本人確認って、みんな送ってるんですか？'},
+  {who:'you',text:'そうだね、ハルトくんにも登録してもらってるよ'},
+  {who:'me',text:'わかりました'},
+  {who:'me',text:'',card:{title:'📷 写真を送信しました',body:'学生証.jpg／保険証.jpg／住所'}},
+  {who:'you',text:'受け取りました。確認OK、これで登録完了👍'},
+  {who:'you',text:'じゃあ最初の仕事ね。明日15時に〇〇駅近くの〇〇町の指定の家で荷物を受け取って、△△駅のロッカーに入れるだけ。中は見なくていいから'},
+  {who:'you',text:'お客さんの個人情報があるから、このやりとりは誰にも言わないでね。会社の決まりなので'},
+  {who:'me',text:'中身は…何ですか？'},
+  {who:'you',text:'お客さんのものだから、こっちも知らないよ。言われた通りに運べば日給は払うから'},
+  {sw:{dark:'darker'}},
+  {who:'me',text:'すみません、やっぱりちょっと不安なので、やめたいです'},
+  {who:'you',text:'え？'},
+  {who:'you',text:'もう学生証も保険証も住所も、こっちにあるよね'},
+  {who:'you',text:'ここでやめたら、家族や学校に迷惑かかるけど、それでいい？'},
+  {who:'you',text:'明日15時。来なかったらどうなるか、分かるよね'},
+  {who:'me',text:'…'},
+  {who:'sys',text:'── ここで、あなたは抜けられなくなった ──'},
+];
+
+const REVEAL = `<h2 style="font-size:34px;line-height:1.5;text-align:center;margin:20px 0"><small style="display:block;font-size:22px;margin-bottom:10px">ここで終わりです</small>一旦ここで、<br>手を止めてください</h2>`;
+
+// ─────────── 動かす部分 ───────────
+const log=document.getElementById('log'), btn=document.getElementById('btn'), sub=document.getElementById('sub'), rv=document.getElementById('reveal'), bar=document.querySelector('#bar i'), phone=document.getElementById('phone');
+let i=0, busy=false;
+const now=()=>{const d=new Date();return `${d.getHours()}:${String(d.getMinutes()).padStart(2,'0')}`};
+const wait=ms=>new Promise(r=>setTimeout(r,ms));
+function add(m){
+  if(m.day){const d=document.createElement('div');d.className='day';d.textContent=m.day;log.appendChild(d);return}
+  const el=document.createElement('div');el.className='msg '+m.who;el.textContent=m.text;
+  if(m.card){const c=document.createElement('div');c.className='card';c.innerHTML=`<b>${m.card.title}</b>${m.card.body}`;el.appendChild(c)}
+  if(m.who!=='sys'){const t=document.createElement('span');t.className='t';t.textContent=now();el.appendChild(t)}
+  log.appendChild(el);log.scrollTop=log.scrollHeight;
+}
+async function step(){
+  if(busy)return; if(i>=STEPS.length){rv.innerHTML=REVEAL+`<button onclick="location.reload()">もう一度</button>`;rv.classList.add('open');return}
+  busy=true;btn.disabled=true;
+  const m=STEPS[i++]; bar.style.width=(i/STEPS.length*100)+'%';
+  if(m.sw){ if(m.sw.av){document.getElementById('av').textContent=m.sw.av;document.getElementById('nm').textContent=m.sw.nm;document.getElementById('st').textContent=m.sw.st;document.getElementById('av').style.background='#b33';} if(m.sw.dark){phone.className=m.sw.dark} if(m.day)add(m); busy=false;btn.disabled=false; return step(); }
+  if(m.day){add(m);busy=false;btn.disabled=false;return}
+  if(m.who==='you'){const ty=document.createElement('div');ty.className='typing';ty.textContent='•••';log.appendChild(ty);log.scrollTop=log.scrollHeight;await wait(500+Math.min(900,(m.text||'').length*22));ty.remove()}
+  else await wait(250);
+  add(m);
+  busy=false;btn.disabled=false;
+  if(i>=STEPS.length){btn.textContent='種明かしを見る';sub.textContent=''}
+  else if(m.who==='you'&&STEPS[i]&&STEPS[i].who==='me'){btn.textContent='返信する ▶';sub.textContent='りくの返信は決まっています。押して進めてください'}
+  else {btn.textContent='タップして進む ▶';sub.textContent=''}
+}
+btn.addEventListener('click',step);
+// 最初の数件（過去のやりとり）は自動で出す
+(async()=>{for(let k=0;k<5;k++){await step();}})();
+</script>
+</body>
+</html>
